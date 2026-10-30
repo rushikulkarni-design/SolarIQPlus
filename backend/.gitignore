@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# Local OSM / shadow-analysis cache
+osm_cache/
+shadow_cache/
+*.cache
+*.tmp
+
+# Local test/downloaded datasets
+test_*.py
+microsoft_building_dataset_links.csv

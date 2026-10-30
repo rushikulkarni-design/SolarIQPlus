@@ -1,0 +1,2 @@
+model,target,train_records,test_records,MAE,RMSE,R2
+XGBoost,AC Output,2221,556,73.1417603819944,122.25165525229477,0.8972990844672261

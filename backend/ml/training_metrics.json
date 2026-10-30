@@ -1,0 +1,66 @@
+{
+  "rows": 368208,
+  "rows_per_location": {
+    "Delhi": 61368,
+    "Bengaluru": 61368,
+    "Jaipur": 61368,
+    "Pune": 61368,
+    "Mumbai": 61368,
+    "Chhatrapati_Sambhajinagar": 61368
+  },
+  "columns": [
+    "time",
+    "P",
+    "Gb(i)",
+    "Gd(i)",
+    "Gr(i)",
+    "H_sun",
+    "T2m",
+    "WS10m",
+    "Int",
+    "time_dt",
+    "latitude",
+    "longitude",
+    "tilt_deg",
+    "city",
+    "hour",
+    "day_of_year",
+    "month",
+    "year"
+  ],
+  "features": [
+    "latitude",
+    "longitude",
+    "tilt_deg",
+    "hour",
+    "day_of_year",
+    "month",
+    "Gb(i)",
+    "Gd(i)",
+    "Gr(i)",
+    "H_sun",
+    "T2m",
+    "WS10m"
+  ],
+  "target": "P (W for 1 kWp system)",
+  "train_rows": 315504,
+  "validation_rows": 52704,
+  "mae_w": 0.8273696511075831,
+  "r2": 0.9999530526427886,
+  "locations": [
+    "Delhi",
+    "Bengaluru",
+    "Jaipur",
+    "Pune",
+    "Mumbai",
+    "Chhatrapati_Sambhajinagar"
+  ],
+  "tilts": {
+    "Delhi": 31,
+    "Bengaluru": 17,
+    "Jaipur": 31,
+    "Pune": 24,
+    "Mumbai": 25,
+    "Chhatrapati_Sambhajinagar": 25
+  }
+}

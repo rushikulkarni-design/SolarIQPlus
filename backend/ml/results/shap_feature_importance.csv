@@ -1,0 +1,11 @@
+Importance Rank,Feature,Mean Absolute SHAP
+1,SZ Angle,240.65154
+2,GHI,42.789066
+3,SA Angle,26.87291
+4,Hour,21.586695
+5,Temperature,14.352643
+6,Month,8.177324
+7,Wind Speed,8.022137
+8,Wind Direction,7.4875717
+9,Relative Humidity,5.456877
+10,Day,3.851528

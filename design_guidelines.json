@@ -1,0 +1,115 @@
+{
+  "project_name": "SOLARIQ+",
+  "tagline": "Smart Solar Planning Made Simple",
+  "app_type": "hybrid_fullstack",
+  "theme_strategy": {
+    "default_theme": "light",
+    "rationale": "A trustworthy, data-dense engineering product requires maximum readability and clarity. Light mode (off-white paper-like backgrounds) provides the best contrast for data, while using Deep Navy for structural elements (sidebar, headers) anchors the interface. Avoid dark mode as default to prevent a 'hacker/cyber' feel; the product must feel like a stable financial/engineering tool."
+  },
+  "typography": {
+    "heading_font": "Chivo",
+    "body_font": "IBM Plex Sans",
+    "mono_font": "IBM Plex Mono",
+    "instructions": "Use Chivo for high-impact metrics and structural headings. Its geometric, slightly square nature feels highly technical and uncompromising. Use IBM Plex Sans for all body text, UI labels, and data tables due to its exceptional legibility at small sizes and 'engineering' pedigree. Use IBM Plex Mono for technical data points like model versions, coordinates, and exact financial figures.",
+    "hierarchy": {
+      "h1": "text-3xl sm:text-4xl font-extrabold tracking-tight",
+      "h2": "text-2xl sm:text-3xl font-bold tracking-tight",
+      "h3": "text-xl sm:text-2xl font-semibold",
+      "h4": "text-lg sm:text-xl font-medium",
+      "body": "text-sm sm:text-base leading-relaxed text-slate-700",
+      "label": "text-xs font-semibold uppercase tracking-wider text-slate-500",
+      "data_value": "text-2xl font-bold font-mono text-slate-900"
+    }
+  },
+  "colors": {
+    "primary": {
+      "navy_dark": "#0B132B",
+      "navy_main": "#1C2541",
+      "navy_light": "#3A506B",
+      "usage": "Use for sidebars, main headers, primary CTA buttons, and critical data focus."
+    },
+    "accent": {
+      "amber_main": "#F59E0B",
+      "amber_light": "#FDE68A",
+      "amber_dark": "#D97706",
+      "usage": "Use sparingly for primary actions, solar-generation metric highlights, and 'AI Insight' badges."
+    },
+    "status": {
+      "success_green": "#059669",
+      "success_light": "#D1FAE5",
+      "warning_amber": "#F59E0B",
+      "error_red": "#DC2626",
+      "info_blue": "#2563EB",
+      "usage": "Restrained use for system status (NORMAL/WARNING/CRITICAL). Do not use these for generic decorations."
+    },
+    "neutral": {
+      "bg_main": "#F8FAFC",
+      "bg_panel": "#FFFFFF",
+      "border": "#E2E8F0",
+      "text_main": "#0F172A",
+      "text_muted": "#64748B"
+    }
+  },
+  "layouts": {
+    "global_structure": "Desktop-first layout. Persistent left sidebar (width: 250px) on desktop, transitioning to a fixed bottom navigation bar on mobile (Home, Plan, Performance, Alerts, More). Main content area must be scrollable independently.",
+    "dashboard_grid": "High-density Bento grid for data. Use grid-cols-1 md:grid-cols-3 lg:grid-cols-4 or grid-cols-12. Tight spacing (gap-4 or gap-6). Cards should be rectangular with very subtle rounded corners (rounded-md max) and 1px solid borders (border-slate-200). NO soft drop shadows. Use flat, solid designs.",
+    "workflow_layout": "Solar Planner uses a top horizontal stepper (01 PROJECT \u2192 07 REPORT) or a left-side vertical timeline for progress tracking. Main content should be centered in a max-w-4xl container to prevent form fields from stretching too wide.",
+    "spacing": "Maintain generous internal padding inside panels (p-6) but tight gaps between panels (gap-4) to create a 'cockpit' feel."
+  },
+  "components_and_visual_enhancers": {
+    "cards_and_panels": "Avoid excessive rounded corners. Use `rounded-sm` or `rounded-md`. Panels must have a 1px border (`border-slate-200`) and a flat white background (`bg-white`). Use a subtle shadow (`shadow-sm`) ONLY on hover or for floating menus. NO glassmorphism.",
+    "buttons": "Primary CTAs: Navy or Amber. Solid color, no gradients. Sharp or slightly rounded corners (`rounded-md`). Hover state: darken color by 10% and add subtle scale-up (`scale-[1.02]`).",
+    "forms": "Use standard Shadcn forms. Inputs must have 1px borders, `bg-white`, and distinct focus states (`focus:ring-2 focus:ring-navy_light`).",
+    "badges": "Use rectangular badges with 1px borders. e.g., `<span className=\"px-2 py-1 text-xs font-mono border border-green-200 bg-green-50 text-green-700 rounded\">NORMAL</span>`.",
+    "data_visualization": "Use `recharts`. Stick to Line Charts (Performance/Prediction), Bar Charts (SHAP-style Feature Impact), and Area Charts. Grid lines must be subtle (`stroke=\"#E2E8F0\" strokeDasharray=\"3 3\"`). Charts must NOT have gradients. Use solid lines.",
+    "file_upload": "Drag and drop zone for Electricity Bill Analysis. Use dashed borders (`border-dashed border-2 border-slate-300`), a subtle gray background (`bg-slate-50`), and an icon.",
+    "ai_explanation_bars": "For 'Powered by SHAP', use horizontal bar charts. Features pushing the prediction UP use green, features pushing DOWN use red/amber. Label them clearly with mono-spaced values."
+  },
+  "media_and_images": {
+    "instructions": "Use real images, NEVER placeholder domains. Images must be contained inside sharp-cornered containers or borders.",
+    "image_urls": {
+      "rooftop_analysis": {
+        "url": "https://images.unsplash.com/photo-1771479755055-6a305f50845e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzJ8MHwxfHNlYXJjaHwzfHxzb2xhciUyMHBhbmVscyUyMHJvb2Z0b3AlMjBob3VzZXxlbnwwfHx8fDE3ODgwOTM0ODN8MA&ixlib=rb-4.1.0&q=85",
+        "category": "Solar Planner > Rooftop Analysis",
+        "description": "Tiled rooftop suitable for overlaying yellow bounding-box object detection UI."
+      },
+      "electricity_bill": {
+        "url": "https://images.unsplash.com/photo-1647005039373-e8fff57b75f6?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzZ8MHwxfHNlYXJjaHwyfHxlbGVjdHJpY2l0eSUyMHV0aWxpdHklMjBiaWxsJTIwZG9jdW1lbnR8ZW58MHx8fHwxNzg4MDkzNDgzfDA&ixlib=rb-4.1.0&q=85",
+        "category": "Solar Planner > Electricity Bill Analysis",
+        "description": "Close up of text document for OCR preview pane."
+      },
+      "solar_farm_hero": {
+        "url": "https://images.unsplash.com/photo-1767614640055-1f971ed007e9?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2OTF8MHwxfHNlYXJjaHwzfHxzb2xhciUyMHBhbmVscyUyMHN1bnNldCUyMGNsZWFuJTIwZW5lcmd5fGVufDB8fHx8MTc4ODA5MzQ4M3ww&ixlib=rb-4.1.0&q=85",
+        "category": "Login Page",
+        "description": "Sunset clean energy landscape for login background."
+      }
+    }
+  },
+  "specific_views": {
+    "dashboard": "Must contain: Top stats cards (Today's Gen, Performance %). Generation Trend chart (1Y, 30D, 7D toggle). AI Insight panel (XGBoost under development tag). System status footer pinned to bottom left.",
+    "solar_planner": "7 steps. Step 1: Project details. Step 2: Bill Drag/Drop. Step 3: Rooftop AI with image and overlay bounding boxes. Step 4: System Recommendation. Step 5: Financials. Step 6: Config. Step 7: Report.",
+    "performance_center": "Actual vs Expected overlay chart. Anomaly Analysis timeline (Isolation Forest). Distinguish REAL data vs SAMPLE/DEMO data with badges."
+  },
+  "accessibility": {
+    "contrast": "Maintain 4.5:1 minimum for all text. Use APCA guidelines for color pairings. Navy on white is excellent.",
+    "focus": "All interactive elements MUST have a visible focus ring (`focus:ring-2 focus:ring-offset-2 focus:ring-navy_main`).",
+    "testing": "All interactive and key informational elements MUST include a `data-testid` attribute (e.g., `data-testid=\"upload-bill-btn\"`)."
+  },
+  "universal_guidelines": [
+    "You tend to converge toward generic, 'on distribution' outputs. In frontend design, this creates what users call the 'AI slop' aesthetic. Avoid this: make creative, distinctive frontends that surprise and delight.",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "DO NOT use glass-morphism or floating blobs for this project (per explicit instructions for a technical/engineering product).",
+    "You MUST NOT apply universal transition. Eg: `transition: all`. Always add transitions for specific interactive elements excluding transforms.",
+    "You MUST NOT center align the app container, ie do not add `.App { text-align: center; }` in the css file. This disrupts the human natural reading flow of text.",
+    "Always use modern button styles like sharp or slightly rounded buttons with interaction animations & color relevant to the app style.",
+    "NEVER: use AI assistant Emoji characters like \ud83e\udd16\ud83e\udde0\ud83d\udcad\ud83d\udca1\ud83d\udd2e\ud83c\udfaf etc for icons. Use lucide-react or phosphor icons.",
+    "Every interaction needs micro-animations - hover states, transitions, and entrance animations. Static = dead.",
+    "Main agent relies on the provided image URLs. Missing categories = main agent will use placeholder text which is FORBIDDEN.",
+    "Use sonner for toasts, located in `/app/src/components/ui/sonner.js` if available or implement using the library."
+  ],
+  "libraries_and_setup": {
+    "icons": "lucide-react (default) or @phosphor-icons/react (for a more technical look).",
+    "charts": "recharts (wrapped in Shadcn Chart components).",
+    "animations": "framer-motion for subtle entrance animations (staggered lists, page transitions). No heavy bouncy physics."
+  }
+}
