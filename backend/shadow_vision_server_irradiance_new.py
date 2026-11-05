@@ -22,7 +22,7 @@ except Exception:
 
 app = FastAPI(
     title="SolarIQ+ Shadow Vision Analysis",
-    version="4.1.0"
+    version="4.2.0"
 )
 
 app.add_middleware(
@@ -117,11 +117,6 @@ SATELLITE_CLASSES = [
     "building",
     "tree",
     "bare land",
-    "road",
-    "water tank",
-    "utility pole",
-    "tower",
-    "solar panels",
 ]
 
 CLOSE_RANGE_CLASSES = [
@@ -174,6 +169,20 @@ def safe_int(value, default=0):
         return int(value)
     except Exception:
         return int(default)
+
+
+def get_model_class_name(names, class_id, fallback=None):
+    """Read Ultralytics class names across dict- and list-based versions."""
+    try:
+        if isinstance(names, dict):
+            value = names.get(class_id, names.get(str(class_id), fallback))
+        elif isinstance(names, (list, tuple)):
+            value = names[class_id] if 0 <= class_id < len(names) else fallback
+        else:
+            value = fallback
+        return str(value if value is not None else class_id)
+    except (IndexError, KeyError, TypeError):
+        return str(fallback if fallback is not None else class_id)
 
 
 def normalize_azimuth(value):
@@ -4040,7 +4049,7 @@ def detect_image(image):
                 cx, cy = (x1+x2)/(2*image_width), (y1+y2)/(2*image_height)
                 # Central objects are more likely to be the obstacle the user framed.
                 center_distance = min(1.0, (((cx-0.5)**2 + (cy-0.5)**2) ** 0.5) / 0.7072)
-                label = str(names.get(class_id, class_id)).lower()
+                label = get_model_class_name(names, class_id, class_id).lower()
                 detections.append({
                     "label": label,
                     "confidence": round(confidence, 4),
@@ -4110,9 +4119,21 @@ def vision_filter(detections, direction):
 
 @app.post("/api/shadow/vision/detect-map-obstacle")
 async def detect_map_obstacle(payload: Dict[str, Any]):
-    """Detect an obstacle at a map-marked coordinate using multi-scale YOLO-World inference."""
+    """
+    Three-class satellite marker classification: building, tree, land.
+
+    YOLO-World is used as a zero-shot detector, not a fine-tuned satellite
+    classifier. A small marker-centred patch is given priority; scene-sized
+    boxes are penalized. A conservative colour/vegetation check is used only
+    as supporting evidence for vegetation and bare ground.
+    """
     if model is None:
-        return {"status": "unavailable", "detected": False, "obstacle_type": "unknown", "message": "YOLO-World model is not loaded."}
+        return {
+            "status": "unavailable", "detected": False,
+            "obstacle_type": "unknown", "suggested_obstacle_type": "unknown",
+            "confidence": 0.0, "detections": [],
+            "message": "YOLO-World model is not loaded."
+        }
 
     try:
         lat = float(payload.get("latitude"))
@@ -4121,134 +4142,216 @@ async def detect_map_obstacle(payload: Dict[str, Any]):
         if not (-85 <= lat <= 85 and -180 <= lon <= 180):
             raise ValueError("Invalid map coordinates")
 
-        # Fetch a 3x3 Esri tile neighborhood and center the exact marked coordinate.
+        # Retrieve a 3x3 Esri World Imagery tile mosaic around the clicked point.
         n = 2 ** zoom
         xf = (lon + 180.0) / 360.0 * n
-        lat_rad = math.radians(lat)
-        yf = (1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * n
+        yf = (1.0 - math.asinh(math.tan(math.radians(lat))) / math.pi) / 2.0 * n
         tx, ty = int(xf), int(yf)
         px, py = int((xf - tx) * 256), int((yf - ty) * 256)
         canvas = Image.new("RGB", (768, 768))
         headers = {"User-Agent": "SolarIQPlus/1.0"}
         for dy in (-1, 0, 1):
             for dx in (-1, 0, 1):
-                url = f"https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{zoom}/{ty+dy}/{tx+dx}"
+                url = (
+                    "https://server.arcgisonline.com/ArcGIS/rest/services/"
+                    f"World_Imagery/MapServer/tile/{zoom}/{ty + dy}/{tx + dx}"
+                )
                 req = urllib.request.Request(url, headers=headers)
-                with urllib.request.urlopen(req, timeout=12) as response:
+                with urllib.request.urlopen(req, timeout=15) as response:
                     tile = Image.open(io.BytesIO(response.read())).convert("RGB")
                 canvas.paste(tile, ((dx + 1) * 256, (dy + 1) * 256))
 
-        point_x, point_y = 256 + px, 256 + py
-        # Main crop keeps context; tighter crop makes small trees/tanks easier to classify.
-        crop = canvas.crop((point_x - 256, point_y - 256, point_x + 256, point_y + 256))
-        tight = canvas.crop((point_x - 128, point_y - 128, point_x + 128, point_y + 128)).resize((512, 512))
+        marker_x, marker_y = 256 + px, 256 + py
+
+        # The central 96x96 tile-pixel patch represents the actual clicked area.
+        # Wider patches are context only and cannot outweigh the detail patch.
+        crop_specs = [("detail", 48, 0.70), ("context", 88, 0.30)]
+        prompts = [
+            "building rooftop viewed directly from above in satellite imagery",
+            "residential building roof in an aerial satellite image",
+            "tree canopy viewed from directly above in satellite imagery",
+            "individual green tree crown in aerial imagery",
+            "bare soil and empty open plot viewed from above in satellite imagery",
+            "dry open ground or vacant land in an aerial satellite image",
+        ]
+        prompt_kind = {
+            0: "building", 1: "building",
+            2: "tree", 3: "tree",
+            4: "land", 5: "land",
+        }
+
+        # Inspect the exact clicked patch for vegetation / exposed-soil evidence.
+        # This is supporting evidence, not a replacement for visual verification.
+        patch_radius = 24
+        local_patch = canvas.crop((
+            max(0, marker_x - patch_radius),
+            max(0, marker_y - patch_radius),
+            min(768, marker_x + patch_radius),
+            min(768, marker_y + patch_radius),
+        )).resize((96, 96))
+        hsv = np.asarray(local_patch.convert("HSV"), dtype=np.uint8)
+        hue = hsv[:, :, 0].astype(np.int16)  # PIL hue range 0..255
+        sat = hsv[:, :, 1].astype(np.int16)
+        val = hsv[:, :, 2].astype(np.int16)
+        green_mask = (hue >= 48) & (hue <= 115) & (sat >= 45) & (val >= 35)
+        soil_mask = (hue >= 5) & (hue <= 42) & (sat >= 35) & (val >= 45)
+        neutral_mask = (sat <= 55) & (val >= 70)
+        green_ratio = float(green_mask.mean())
+        soil_ratio = float(soil_mask.mean())
+        neutral_ratio = float(neutral_mask.mean())
 
         raw = []
-        for image, scale_name in ((crop, "context"), (tight, "detail")):
+        for scale_name, half_size, scale_weight in crop_specs:
+            left = max(0, marker_x - half_size)
+            top = max(0, marker_y - half_size)
+            right = min(768, marker_x + half_size)
+            bottom = min(768, marker_y + half_size)
+            crop = canvas.crop((left, top, right, bottom)).resize((640, 640))
+            mx = (marker_x - left) * 640.0 / max(1, right - left)
+            my = (marker_y - top) * 640.0 / max(1, bottom - top)
+
             try:
                 with _MODEL_LOCK:
-                    model.set_classes(SATELLITE_CLASSES)
-                    result = model.predict(image, conf=0.05, iou=0.50, imgsz=1024, max_det=30, verbose=False)[0]
-                names = result.names or {}
-                if result.boxes is None:
+                    model.set_classes(prompts)
+                    prediction = model.predict(
+                        crop, conf=0.005, iou=0.50, imgsz=640,
+                        max_det=60, agnostic_nms=True, verbose=False
+                    )[0]
+
+                if prediction.boxes is None:
                     continue
-                w, h = image.size
-                for box in result.boxes:
-                    xyxy = box.xyxy[0].detach().cpu().numpy().tolist()
+
+                for box in prediction.boxes:
+                    coords = box.xyxy[0].detach().cpu().numpy().tolist()
                     conf = float(box.conf[0].detach().cpu())
                     cls_id = int(box.cls[0].detach().cpu())
-                    x1, y1, x2, y2 = map(float, xyxy)
-                    # Convert tight-crop box coordinates back to the 512px context crop.
-                    if scale_name == "detail":
-                        x1, x2 = x1 / 2 + 128, x2 / 2 + 128
-                        y1, y2 = y1 / 2 + 128, y2 / 2 + 128
-                    cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
-                    # Penalize detections far from the marked coordinate, but don't require
-                    # the marker to lie inside the box: satellite boxes are often imprecise.
-                    distance = math.hypot(cx - 256, cy - 256)
-                    contains = x1 <= 256 <= x2 and y1 <= 256 <= y2
-                    label = str(names.get(cls_id, cls_id)).lower()
+                    if cls_id not in prompt_kind:
+                        continue
+                    x1, y1, x2, y2 = map(float, coords)
+                    # Clamp coordinates to the resized image bounds.
+                    x1, x2 = sorted((max(0.0, min(640.0, x1)), max(0.0, min(640.0, x2))))
+                    y1, y2 = sorted((max(0.0, min(640.0, y1)), max(0.0, min(640.0, y2))))
+                    w, h = x2 - x1, y2 - y1
+                    area = (w * h) / (640.0 * 640.0)
+                    cx, cy = (x1 + x2) / 2.0, (y1 + y2) / 2.0
+                    distance = math.hypot(cx - mx, cy - my)
+                    covers = x1 <= mx <= x2 and y1 <= my <= y2
+                    if area < 0.003 or (not covers and distance > 65):
+                        continue
+
+                    # Suppress boxes describing most of the scene; prefer compact,
+                    # marker-local objects. Keep the original model confidence visible.
+                    size_factor = max(0.08, 1.0 - max(0.0, area - 0.12) * 2.2)
+                    proximity_factor = max(0.15, 1.0 - distance / 220.0)
+                    marker_factor = 1.0 if covers else 0.55
+                    score = conf * size_factor * proximity_factor * marker_factor * scale_weight
+
                     raw.append({
-                        "label": label,
+                        "label": prompts[cls_id],
+                        "obstacle_type": prompt_kind[cls_id],
                         "confidence": round(conf, 4),
-                        "bbox": [round(x1, 2), round(y1, 2), round(x2, 2), round(y2, 2)],
-                        "center_distance_px": round(distance, 2),
-                        "covers_marker": bool(contains),
+                        "selection_score": round(score, 5),
+                        "bbox": [round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1)],
+                        "center_distance_px": round(distance, 1),
+                        "covers_marker": bool(covers),
+                        "area_fraction": round(area, 4),
                         "scale": scale_name,
                     })
             except Exception as infer_error:
-                print(f"[WARN] YOLO {scale_name} inference failed: {infer_error}")
+                print(f"[WARN] YOLO satellite {scale_name} inference failed: {infer_error}")
 
-        if not raw:
-            return {"status": "completed", "detected": False, "obstacle_type": "unknown", "confidence": 0, "detections": [], "message": "YOLO produced no boxes. Try a closer map zoom or mark the centre of the visible object."}
+        # Aggregate the strongest marker-local candidate per permitted class.
+        class_scores = {"building": 0.0, "tree": 0.0, "land": 0.0}
+        best_by_class = {}
+        for item in raw:
+            kind = item["obstacle_type"]
+            if item["selection_score"] > class_scores[kind]:
+                class_scores[kind] = item["selection_score"]
+                best_by_class[kind] = item
 
-        # Only classify the object the user actually marked. Low-confidence nearby
-        # boxes are common in satellite imagery and must not be promoted to a label.
-        # Prefer a box covering the clicked coordinate; otherwise require a tight
-        # centre distance. This affects satellite markers only, not photo analysis.
-        raw.sort(key=lambda d: (
-            0 if d["covers_marker"] else 1,
-            d["center_distance_px"],
-            -d["confidence"],
-        ))
-        near = [d for d in raw if d["covers_marker"] or d["center_distance_px"] <= 45]
-        if not near:
-            return {
-                "status": "completed", "detected": False,
-                "obstacle_type": "unknown", "confidence": 0,
-                "detections": raw[:6],
-                "message": "No detection closely matches the marked point. Move the marker to the centre of the object or zoom in; nearby detections are not treated as the marked obstacle.",
-            }
+        # Conservative local image evidence. Trees need visible green vegetation;
+        # exposed land needs soil/brown evidence and little green vegetation.
+        # These cues cannot by themselves establish a building.
+        if green_ratio >= 0.18:
+            class_scores["tree"] += min(0.035, (green_ratio - 0.18) * 0.08)
+        if soil_ratio >= 0.22 and green_ratio < 0.18:
+            class_scores["land"] += min(0.035, (soil_ratio - 0.22) * 0.07)
 
-        # Deduplicate the same object seen in context/detail crops by category.
-        def satellite_kind(label_text):
-            t = str(label_text).lower()
-            if any(k in t for k in ("bare land", "empty plot", "open ground", "road", "empty land")):
-                return "land"
-            if any(k in t for k in ("tree", "canopy", "vegetation")):
-                return "tree"
-            if "tank" in t:
-                return "water_tank"
-            if any(k in t for k in ("utility pole", "pole", "tower", "mast")):
-                return "tower"
-            if any(k in t for k in ("solar panel", "solar panels", "photovoltaic")):
-                return "solar_panel_array"
-            if any(k in t for k in ("building", "rooftop", "structure", "residential")):
-                return "building"
-            return "unknown"
+        ranked = sorted(class_scores.items(), key=lambda pair: pair[1], reverse=True)
+        chosen_kind, chosen_score = ranked[0]
+        second_score = ranked[1][1]
+        chosen_detection = best_by_class.get(chosen_kind)
 
-        # Rank by marker coverage first, then confidence, then distance. Requiring
-        # meaningful confidence prevents 6-13% tree guesses being shown as facts.
-        near.sort(key=lambda d: (
-            0 if d["covers_marker"] else 1,
-            -d["confidence"],
-            d["center_distance_px"],
-        ))
-        best = near[0]
-        kind = satellite_kind(best["label"])
-        confidence = float(best["confidence"])
+        # Require a real marker-local model box for buildings. For tree/land,
+        # a strong local visual cue may support a weak model response, but not
+        # fabricate a high-confidence result.
+        model_conf = float(chosen_detection["confidence"]) if chosen_detection else 0.0
+        model_local = bool(chosen_detection and chosen_detection["covers_marker"])
+        visual_support = (
+            (chosen_kind == "tree" and green_ratio >= 0.18) or
+            (chosen_kind == "land" and soil_ratio >= 0.22 and green_ratio < 0.18)
+        )
+        accepted = bool(
+            chosen_score >= 0.012 and
+            (model_local or visual_support) and
+            (chosen_kind != "building" or model_conf >= 0.025)
+        )
 
-        # If the top two close-by candidates disagree on class and their confidence
-        # is close, report ambiguity instead of confidently choosing the wrong class.
-        competing = [d for d in near[1:] if satellite_kind(d["label"]) not in (kind, "unknown")]
-        ambiguous = bool(competing and abs(confidence - float(competing[0]["confidence"])) < 0.08)
-        accepted = kind != "unknown" and confidence >= 0.20 and not ambiguous
+        # Convert selection score into a conservative UI confidence estimate.
+        display_conf = min(0.95, max(model_conf, chosen_score * 3.0))
+        detections = []
+        for kind, score in ranked:
+            item = best_by_class.get(kind)
+            if item:
+                detections.append({
+                    key: value for key, value in item.items()
+                    if key != "selection_score"
+                })
+            else:
+                detections.append({
+                    "label": kind,
+                    "obstacle_type": kind,
+                    "confidence": 0.0,
+                    "local_visual_support": (
+                        round(green_ratio, 3) if kind == "tree"
+                        else round(soil_ratio, 3) if kind == "land"
+                        else None
+                    ),
+                })
+
         return {
             "status": "completed",
-            "detected": bool(accepted),
-            "obstacle_type": kind if accepted else "unknown",
-            "label": best["label"],
-            "confidence": round(confidence, 4),
-            "low_confidence": confidence < 0.30,
-            "ambiguous": ambiguous,
-            "detections": near[:6],
+            "detected": accepted,
+            "obstacle_type": chosen_kind if accepted else "unknown",
+            "suggested_obstacle_type": chosen_kind,
+            "label": chosen_kind,
+            "confidence": round(display_conf if accepted else model_conf, 4),
+            "low_confidence": display_conf < 0.15,
+            "needs_review": True,
+            "ambiguous": bool(second_score > 0 and abs(chosen_score - second_score) < 0.006),
+            "detections": detections,
+            "local_image_evidence": {
+                "green_vegetation_ratio": round(green_ratio, 3),
+                "exposed_soil_ratio": round(soil_ratio, 3),
+                "neutral_surface_ratio": round(neutral_ratio, 3),
+            },
             "message": (
-                "Satellite prediction; verify the object type." if accepted
-                else "Satellite classification is uncertain at this marker. It is left unclassified rather than incorrectly labelled as a tree/building. Zoom in and mark the centre of the object."
+                f"Suggested class: {chosen_kind}. Verify the marker before using it for shadow calculations."
+                if accepted else
+                "The model could not confidently classify the exact marked patch. Move the marker onto the centre of a clearly visible building, tree, or bare-land area, or select the class manually."
             ),
+            "model": MODEL_NAME,
+            "method": "YOLO-World marker-centred three-class inference with local satellite colour evidence",
         }
+
     except Exception as exc:
-        return {"status": "error", "detected": False, "obstacle_type": "unknown", "message": f"Map-image detection failed: {exc}"}
+        print(f"[ERROR] Map-image detection failed: {exc}")
+        return {
+            "status": "error", "detected": False,
+            "obstacle_type": "unknown", "suggested_obstacle_type": "unknown",
+            "confidence": 0.0, "detections": [],
+            "message": f"Map-image detection failed: {exc}"
+        }
 
 
 @app.post(
